@@ -1,40 +1,37 @@
 import datajoint as dj
-from pipeline import probe
-from lab_management import lab
+import inspect
 
+# ===========================================================================================
+# ===================================== CONFIGURABLE COMPONENTS =============================
+# ===========================================================================================
 
-# ===================================== Specify "upstream" tables =====================================
-
-Subject = lab.Subject
-Session = lab.Session
-Location = lab.Location
 
 # ===================================== Probe Insertion =====================================
 
 
 class ProbeInsertionAcute(dj.Manual):  # choice 1 (acute)
 
-    _Subject = Subject
-    _Session = Session
+    _Subject = ...
+    _Session = ...
 
     definition = """
     -> self._Subject  # API hook point
     -> self._Session  # API hook point
     insertion_number: int
     ---
-    -> probe.Probe
+    -> Probe
     """
 
 
 class ProbeInsertionChronic(dj.Manual):  # choice 2 (chronic)
 
-    _Subject = Subject
+    _Subject = ...
 
     definition = """
     -> self._Subject  # API hook point
     insertion_number: int
     ---
-    -> probe.Probe
+    -> Probe
     insertion_time: datetime
     """
 
@@ -46,7 +43,7 @@ ProbeInsertion = ProbeInsertionAcute
 class InsertionLocation(dj.Manual):
 
     _ProbeInsertion = ProbeInsertion
-    _Location = Location
+    _Location = ...
 
     definition = """
     -> self._ProbeInsertion      # API hook point
@@ -59,7 +56,7 @@ class InsertionLocation(dj.Manual):
 
 class EphysRecording(dj.Manual):
 
-    _Session = Session
+    _Session = ...
     _ProbeInsertion = ProbeInsertion
     _get_npx_data_dir = ...
 
@@ -67,8 +64,12 @@ class EphysRecording(dj.Manual):
     -> self._Session             # API hook point
     -> self._ProbeInsertion      # API hook point
     ---
-    -> probe.ElectrodeConfig
+    -> ElectrodeConfig
     """
+
+# ===========================================================================================
+# ================================= NON-CONFIGURABLE COMPONENTS =============================
+# ===========================================================================================
 
 
 # ===================================== Ephys LFP =====================================
@@ -85,7 +86,7 @@ class LFP(dj.Imported):
     class Electrode(dj.Part):
         definition = """
         -> master
-        -> probe.ElectrodeConfig.Electrode  
+        -> ElectrodeConfig.Electrode  
         ---
         lfp: longblob               # recorded lfp at this electrode
         """
@@ -100,7 +101,7 @@ class ClusteringMethod(dj.Lookup):
     clustering_method_desc: varchar(1000)
     """
 
-    contents = zip(['kilosort'])
+    contents = [('kilosort', 'kilosort clustering method')]
 
 
 class ClusterQualityLabel(dj.Lookup):
@@ -142,7 +143,7 @@ class Unit(dj.Imported):
     -> Clustering
     unit: int
     ---
-    -> probe.ElectrodeConfig.Electrode  # electrode on the probe that this unit has highest response amplitude
+    -> ElectrodeConfig.Electrode  # electrode on the probe that this unit has highest response amplitude
     -> ClusterQualityLabel
     """
 
@@ -168,7 +169,7 @@ class Waveform(dj.Imported):
     class Electrode(dj.Part):
         definition = """
         -> master
-        -> probe.ElectrodeConfig.Electrode  
+        -> ElectrodeConfig.Electrode  
         --- 
         waveform_mean: longblob   # mean over all spikes
         waveforms=null: longblob  # (spike x sample) waveform of each spike at each electrode
@@ -197,5 +198,6 @@ class ClusterQualityMetrics(dj.Imported):
     silhouette_score=null: float  # Standard metric for cluster overlap
     max_drift=null: float  # Maximum change in spike depth throughout recording
     cumulative_drift=null: float  # Cumulative change in spike depth throughout recording 
-
     """
+
+
