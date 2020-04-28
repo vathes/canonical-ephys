@@ -30,8 +30,18 @@ class SkullReference(dj.Lookup):
 
 
 @schema
+class LocationDataSource(dj.Lookup):
+    definition = """
+    location_data_source: varchar(36)    
+    """
+
+
+@schema
 class Location(dj.Manual):
     definition = """
+    location_id: uuid
+    ---
+    -> LocationDataSource
     -> SkullReference
     ap_location: decimal(6, 2) # (um) anterior-posterior; ref is 0; more anterior is more positive
     ml_location: decimal(6, 2) # (um) medial axis; ref is 0 ; more right is more positive

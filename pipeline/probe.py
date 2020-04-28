@@ -35,7 +35,7 @@ class ElectrodeConfig(dj.Lookup):
     -> ProbeType
     electrode_config_name: varchar(64)  # user friendly name
     ---
-    electrode_config_hash: varchar(36)  # hash of the group and group_member (ensure uniqueness)
+    electrode_config_uuid: uuid     # hash of the group and group_member (ensure uniqueness)
     unique index (electrode_config_hash)
     """
 
