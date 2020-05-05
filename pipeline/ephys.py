@@ -2,8 +2,10 @@ import pathlib
 import re
 import numpy as np
 import datajoint as dj
+import uuid
 
 from . import utils
+from .probe import ProbeType, Probe, ElectrodeConfig
 from loaders import neuropixels, kilosort
 
 # ===========================================================================================
@@ -99,7 +101,7 @@ class EphysRecording(dj.Imported):
                 npx_meta.probe_model))
 
         # ---- compute hash for the electrode config (hash of dict of all ElectrodeConfig.Electrode) ----
-        ec_hash = utils.dict_to_hash({k['electrode']: k for k in eg_members})
+        ec_hash = uuid.UUID(utils.dict_to_hash({k['electrode']: k for k in eg_members}))
 
         el_list = sorted([k['electrode'] for k in eg_members])
         el_jumps = [-1] + np.where(np.diff(el_list) > 1)[0].tolist() + [len(el_list) - 1]
@@ -108,8 +110,8 @@ class EphysRecording(dj.Imported):
         e_config = {**probe_type, 'electrode_config_name': ec_name}
 
         # ---- make new ElectrodeConfig if needed ----
-        if not (ElectrodeConfig & {'electrode_config_hash': ec_hash}):
-            ElectrodeConfig.insert1({**e_config, 'electrode_config_hash': ec_hash})
+        if not (ElectrodeConfig & {'electrode_config_uuid': ec_hash}):
+            ElectrodeConfig.insert1({**e_config, 'electrode_config_uuid': ec_hash})
             ElectrodeConfig.Electrode.insert({**e_config, **m} for m in eg_members)
 
         self.insert1({**key, **e_config})

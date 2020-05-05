@@ -16,7 +16,7 @@ def get_ephys_probe_data_dir(probe_key):
     sess_date_string = probe_key['session_datetime'].strftime('%m%d%y')
 
     dir_pattern = f'*{subj}_{sess_date_string}*_imec{probe_no}'
-    npx_meta_pattern = f'{subj}_{sess_date_string}*_imec{probe_no}.ap.meta'
+    npx_meta_pattern = f'{subj}_{sess_date_string}*imec{probe_no}.ap.meta'
 
     try:
         npx_meta_fp = next(root_dir.rglob('/'.join([dir_pattern, npx_meta_pattern])))
