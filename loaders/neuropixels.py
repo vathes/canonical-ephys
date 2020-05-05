@@ -123,7 +123,7 @@ class NeuropixelsMeta:
         self.shankmap = self._parse_shankmap(self.meta['~snsShankMap']) if '~snsShankMap' in self.meta else None
         self.imroTbl = self._parse_imrotbl(self.meta['~imroTbl']) if '~imroTbl' in self.meta else None
 
-        self.recording_channels = [c[0] for c in self.imroTbl['data'].values()] if self.imroTbl else None
+        self.recording_channels = [c[0] for c in self.imroTbl['data']] if self.imroTbl else None
 
     @staticmethod
     def _parse_chanmap(raw):

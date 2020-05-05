@@ -66,7 +66,6 @@ class EphysRecording(dj.Imported):
 
     _Session = ...
     _ProbeInsertion = ProbeInsertion
-    _get_npx_data_dir = ...
 
     definition = """
     -> self._Session             # API hook point
@@ -75,8 +74,12 @@ class EphysRecording(dj.Imported):
     -> ElectrodeConfig
     """
 
+    @staticmethod
+    def _get_npx_data_dir():
+        return None
+
     def make(self, key):
-        npx_dir = self._get_npx_data_dir(key)
+        npx_dir = EphysRecording._get_npx_data_dir(key)
 
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
 
@@ -137,7 +140,7 @@ class LFP(dj.Imported):
         """
 
     def make(self, key):
-        npx_dir = EphysRecording()._get_npx_data_dir(key)
+        npx_dir = EphysRecording._get_npx_data_dir(key)
         npx_recording = neuropixels.Neuropixels(npx_dir)
 
         lfp = npx_recording.lfdata[:, :-1].T  # exclude the sync channel
@@ -217,8 +220,6 @@ class Clustering(dj.Manual):
 
 class Unit(dj.Imported):
 
-    _get_ks_data_dir = ...
-
     definition = """   
     -> Clustering
     unit: int
@@ -227,14 +228,20 @@ class Unit(dj.Imported):
     -> ClusterQualityLabel
     """
 
-    key_source = Clustering
+    @staticmethod
+    def _get_ks_data_dir():
+        return None
+
+    @property
+    def key_source(self):
+        return Clustering
 
     def make(self, key):
-        npx_dir = EphysRecording()._get_npx_data_dir(key)
+        npx_dir = EphysRecording._get_npx_data_dir(key)
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
         npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
 
-        ks_dir = self._get_ks_data_dir(key)
+        ks_dir = Unit._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Remove 0-spike units
@@ -265,12 +272,14 @@ class UnitSpikeTimes(dj.Imported):
     unit_spike_times: longblob    # (s) spike times of this unit, relative to the start of the EphysRecording
     """
 
-    key_source = Clustering & Unit
+    @property
+    def key_source(self):
+        return Clustering & Unit
 
     def make(self, key):
         units = {u['unit']: u for u in (Unit & key).fetch(as_dict=True, order_by='unit')}
 
-        ks_dir = Unit()._get_ks_data_dir(key)
+        ks_dir = Unit._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Spike-times --
@@ -295,10 +304,12 @@ class Waveform(dj.Imported):
     definition = """
     -> Unit
     ---
-    peak_chn_waveform_mean: longlob  # mean over all spikes at the peak channel for this unit
+    peak_chn_waveform_mean: longblob  # mean over all spikes at the peak channel for this unit
     """
 
-    key_source = Clustering & Unit
+    @property
+    def key_source(self):
+        return Clustering & Unit
 
     class Electrode(dj.Part):
         definition = """
@@ -312,11 +323,11 @@ class Waveform(dj.Imported):
     def make(self, key):
         units = {u['unit']: u for u in (Unit & key).fetch(as_dict=True, order_by='unit')}
 
-        npx_dir = EphysRecording()._get_npx_data_dir(key)
+        npx_dir = EphysRecording._get_npx_data_dir(key)
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
         npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
 
-        ks_dir = Unit()._get_ks_data_dir(key)
+        ks_dir = Unit._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Get channel and electrode-site mapping

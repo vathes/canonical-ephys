@@ -1,3 +1,4 @@
+import inspect
 from .ephys import *
 from .probe import *
 
@@ -48,6 +49,13 @@ def _init_probe_tbls(schema, context):
         init_tbl = schema(tbl, context=context)
         context[tbl.__name__] = init_tbl
         init_tbls[tbl.__name__] = init_tbl
+
+    # Insert probe details
+    probe_types = ('neuropixels 1.0 - 3A', 'neuropixels 1.0 - 3B',
+                   'neuropixels 2.0 - SS', 'neuropixels 2.0 - MS')
+    for probe_type in probe_types:
+        if {'probe_type': probe_type} not in ProbeType.proj():
+            ProbeType().create_neuropixels_probe(probe_type)
 
     return init_tbls
 
