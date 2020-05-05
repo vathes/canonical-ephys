@@ -1,10 +1,12 @@
 import re
+import uuid
 
 from loaders import neuropixels
 from my_project.lab_management import lab
 from my_project.init_ephys import ephys_tbls
-from my_project.utils import get_ephys_root_data_dir
+from my_project.utils import get_ephys_root_data_dir, get_ks_data_dir, extract_clustering_info
 
+from pipeline.utils import dict_to_hash
 
 # ========== Insert new "Subject" ===========
 
@@ -62,3 +64,25 @@ for sess_key in lab.Session.fetch('KEY'):
             probe_insertions.append({**sess_key, **probe, 'insertion_number': int(probe_number)})
 
 ProbeInsertion.insert(probe_insertions, ignore_extra_fields=True, skip_duplicates=True)
+
+# ========== Insert new "Clustering" ===========
+
+EphysRecording = ephys_tbls['EphysRecording']
+Clustering = ephys_tbls['Clustering']
+
+clusterings = []
+for ephys_key in EphysRecording.fetch('KEY'):
+    ks_dir = get_ks_data_dir(ephys_key)
+    creation_time, is_curated, is_qc = extract_clustering_info(ks_dir)
+
+    clus_key = {**ephys_key,
+                'clustering_method': 'kilosort',
+                'clustering_time': creation_time,
+                'quality_control': is_qc,
+                'manual_curation': is_curated}
+
+    clus_uuid = uuid.UUID(dict_to_hash(clus_key))
+
+    clusterings.append({**clus_key, 'clustering_instance': clus_uuid})
+
+Clustering.insert(clusterings, skip_duplicates=True)

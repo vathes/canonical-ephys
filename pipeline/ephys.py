@@ -251,13 +251,14 @@ class Unit(dj.Imported):
         valid_units = ks.data['cluster_ids'][withspike_idx]
         valid_unit_labels = ks.data['cluster_groups'][withspike_idx]
         # -- Get channel and electrode-site mapping
-        chn2electrodes = get_npx_chn2electrode_map(npx_meta, key)
+        e_config_key = (EphysRecording * ElectrodeConfig & key).fetch1('KEY')
+        chn2electrodes = get_npx_chn2electrode_map(npx_meta, e_config_key)
         # -- Insert unit, label, peak-chn
         units = []
         for unit, unit_lbl in zip(valid_units, valid_unit_labels):
             if (ks.data['spike_clusters'] == unit).any():
                 unit_channel, _ = ks.get_best_channel(unit)
-                units.append({'unit': unit, 'cluster_type': unit_lbl, **chn2electrodes[unit_channel]})
+                units.append({'unit': unit, 'cluster_quality_label': unit_lbl, **chn2electrodes[unit_channel]})
 
         self.insert([{**key, **u} for u in units])
 
@@ -333,7 +334,8 @@ class Waveform(dj.Imported):
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Get channel and electrode-site mapping
-        chn2electrodes = get_npx_chn2electrode_map(npx_meta, key)
+        e_config_key = (EphysRecording * ElectrodeConfig & key).fetch1('KEY')
+        chn2electrodes = get_npx_chn2electrode_map(npx_meta, e_config_key)
 
         is_qc = (Clustering & key).fetch1('quality_control')
 
@@ -359,8 +361,8 @@ class Waveform(dj.Imported):
                     if chn2electrodes[chn]['electrode'] == unit_dict['electrode']:
                         unit_peak_waveforms.append({**unit_dict, 'peak_chn_waveform_mean': chn_wf.mean(axis=0)})
 
-        self.insert(unit_peak_waveforms)
-        self.Electrode.insert(unit_waveforms)
+        self.insert(unit_peak_waveforms, ignore_extra_fields=True)
+        self.Electrode.insert(unit_waveforms, ignore_extra_fields=True)
 
 
 # ===================================== Quality Control [WIP] =====================================
