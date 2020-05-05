@@ -1,6 +1,9 @@
 import datajoint as dj
 
+schema = dj.schema('u24_lab_')
 
+
+@schema
 class Subject(dj.Manual):
     definition = """
     subject_id: varchar(64)
@@ -10,6 +13,7 @@ class Subject(dj.Manual):
     """
 
 
+@schema
 class Session(dj.Manual):
     definition = """
     -> Subject
@@ -17,6 +21,7 @@ class Session(dj.Manual):
     """
 
 
+@schema
 class SkullReference(dj.Lookup):
     definition = """
     skull_reference   : varchar(60)
@@ -24,8 +29,19 @@ class SkullReference(dj.Lookup):
     contents = zip(['Bregma', 'Lambda'])
 
 
+@schema
+class LocationDataSource(dj.Lookup):
+    definition = """
+    location_data_source: varchar(36)    
+    """
+
+
+@schema
 class Location(dj.Manual):
     definition = """
+    location_id: uuid
+    ---
+    -> LocationDataSource
     -> SkullReference
     ap_location: decimal(6, 2) # (um) anterior-posterior; ref is 0; more anterior is more positive
     ml_location: decimal(6, 2) # (um) medial axis; ref is 0 ; more right is more positive
