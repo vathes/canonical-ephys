@@ -5,7 +5,7 @@ import datajoint as dj
 import uuid
 
 from . import utils
-from .probe import ProbeType, Probe, ElectrodeConfig
+from .probe import ProbeType, Probe, ProbeType, ElectrodeConfig
 from loaders import neuropixels, kilosort
 
 # ===========================================================================================
@@ -155,7 +155,7 @@ class LFP(dj.Imported):
         Only store LFP for every 9th channel (defined in skip_chn_counts), counting in reverse
             Due to high channel density, close-by channels exhibit highly similar lfp
         '''
-        q_electrodes = ProbeModel.Electrode * ElectrodeConfig.Electrode & key
+        q_electrodes = ProbeType.Electrode * ElectrodeConfig.Electrode & key
         electrodes = []
         for recorded_site in np.arange(lfp.shape[0]):
             shank, shank_col, shank_row, _ = npx_recording.npx_meta.shankmap['data'][recorded_site]
@@ -391,7 +391,7 @@ class ClusterQualityMetrics(dj.Imported):
 
 
 def get_npx_chn2electrode_map(npx_meta, e_config_key):
-    q_electrodes = ProbeModel.Electrode * ElectrodeConfig.Electrode & e_config_key
+    q_electrodes = ProbeType.Electrode * ElectrodeConfig.Electrode & e_config_key
     chn2electrode_map = {}
     for recorded_site, (shank, shank_col, shank_row, _) in enumerate(npx_meta.shankmap['data']):
         chn2electrode_map[recorded_site] = (q_electrodes
