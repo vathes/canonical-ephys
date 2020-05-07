@@ -33,6 +33,20 @@ def check_requirements(requirements):
     return checked_requirements
 
 
+# ========================== SINGLETON TABLE-SET =======================
+
+class OneEphysPipeline:
+    __instance = None
+
+    def __init__(self):
+        if OneEphysPipeline.__instance is None:
+            OneEphysPipeline.__instance = True
+        else:
+            raise RuntimeError('Unable to initialize ephys pipeline twice!')
+
+    def exists(self):
+        return bool(self.__instance)
+
 # ========================== HELPER METHODS =======================
 
 _probe_tbls = (ProbeType, Probe, ElectrodeConfig)
@@ -77,6 +91,9 @@ def _init_ephys_tbls(schema, requirements, context):
 
 
 def init_ephys_pipeline(schema, requirements, context={}, add_here=False):
+    if OneEphysPipeline().exists():
+        raise RuntimeError('Unable to initialize ephys pipeline twice!')
+
     requirements = check_requirements(requirements)
 
     if add_here and not context:
@@ -93,5 +110,7 @@ def init_ephys_pipeline(schema, requirements, context={}, add_here=False):
 
     if add_here:
         context.update(**ephys_pipeline)
+
+    OneEphysPipeline()
 
     return ephys_pipeline
