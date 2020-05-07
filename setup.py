@@ -23,6 +23,6 @@ setup(
     url='https://github.com/vathes/canonical-ephys',
     keywords='neuroscience electrophysiology science datajoint',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    scripts=['scripts/mapshell.py', 'scripts/map-mock-data.py', 'scripts/globus-shell.py'],
+    scripts=[],
     install_requires=requirements,
 )
