@@ -44,8 +44,9 @@ class OneEphysPipeline:
         else:
             raise RuntimeError('Unable to initialize ephys pipeline twice!')
 
-    def exists(self):
-        return bool(self.__instance)
+    @staticmethod
+    def exists():
+        return bool(OneEphysPipeline.__instance)
 
 # ========================== HELPER METHODS =======================
 
@@ -91,7 +92,7 @@ def _init_ephys_tbls(schema, requirements, context):
 
 
 def init_ephys_pipeline(schema, requirements, context={}, add_here=False):
-    if OneEphysPipeline().exists():
+    if OneEphysPipeline.exists():
         raise RuntimeError('Unable to initialize ephys pipeline twice!')
 
     requirements = check_requirements(requirements)
