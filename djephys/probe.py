@@ -1,7 +1,7 @@
 import datajoint as dj
 import numpy as np
 
-from djutils.templates import RequiredMethod, SchemaTemplate
+from djutils.templates import SchemaTemplate
 
 
 schema = SchemaTemplate()

@@ -8,9 +8,7 @@ from . import utils
 from .probe import schema, Probe, ProbeType, ElectrodeConfig
 from ephys_loaders import neuropixels, kilosort
 
-from djutils.templates import RequiredMethod
-
-required = RequiredMethod()
+from djutils.templates import required
 
 # ===================================== Probe Insertion =====================================
 
