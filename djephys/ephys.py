@@ -5,17 +5,17 @@ import datajoint as dj
 import uuid
 
 from . import utils
-from .probe import ProbeType, Probe, ProbeType, ElectrodeConfig
-from loaders import neuropixels, kilosort
+from .probe import schema, Probe, ProbeType, ElectrodeConfig
+from ephys_loaders import neuropixels, kilosort
 
-# ===========================================================================================
-# ===================================== CONFIGURABLE COMPONENTS =============================
-# ===========================================================================================
+from djutils.templates import RequiredMethod
 
+required = RequiredMethod()
 
 # ===================================== Probe Insertion =====================================
 
 
+@schema
 class ProbeInsertionAcute(dj.Manual):  # choice 1 (acute)
 
     _Subject = ...
@@ -42,11 +42,14 @@ class ProbeInsertionChronic(dj.Manual):  # choice 2 (chronic)
     insertion_time: datetime
     """
 
+
 ProbeInsertion = ProbeInsertionAcute
+ProbeInsertion.__name__ = 'ProbeInsertion'
 
 # ===================================== Insertion Location =====================================
 
 
+@schema
 class InsertionLocation(dj.Manual):
 
     _ProbeInsertion = ProbeInsertion
@@ -61,9 +64,10 @@ class InsertionLocation(dj.Manual):
 # ===================================== Ephys Recording =====================================
 # The abstract function _get_npx_data_dir() should expect one argument in the form of a
 # dictionary with the keys from user-defined Subject and Session, as well as
-# "insertion_number" (as int) based on the "ProbeInsertion" table definition in this pipeline
+# "insertion_number" (as int) based on the "ProbeInsertion" table definition in this djephys
 
 
+@schema
 class EphysRecording(dj.Imported):
 
     _Session = ...
@@ -77,6 +81,7 @@ class EphysRecording(dj.Imported):
     """
 
     @staticmethod
+    @required
     def _get_npx_data_dir():
         return None
 
@@ -124,6 +129,7 @@ class EphysRecording(dj.Imported):
 
 # ===================================== Ephys LFP =====================================
 
+@schema
 class LFP(dj.Imported):
     definition = """
     -> EphysRecording
@@ -173,6 +179,7 @@ class LFP(dj.Imported):
 # ===================================== Clustering =====================================
 
 
+@schema
 class ClusteringMethod(dj.Lookup):
     definition = """
     clustering_method: varchar(32)
@@ -183,6 +190,7 @@ class ClusteringMethod(dj.Lookup):
     contents = [('kilosort', 'kilosort clustering method')]
 
 
+@schema
 class ClusterQualityLabel(dj.Lookup):
     definition = """
     # Quality
@@ -198,6 +206,7 @@ class ClusterQualityLabel(dj.Lookup):
     ]
 
 
+@schema
 class Clustering(dj.Manual):
 
     definition = """
@@ -217,9 +226,10 @@ class Clustering(dj.Manual):
 # ================================== Clustering Results ===================================
 # The abstract function _get_ks_data_dir() should expect one argument in the form of a
 # dictionary with the keys from user-defined Subject and Session, as well as
-# all attributes in the "Clustering" table definition in this pipeline
+# all attributes in the "Clustering" table definition in this djephys
 
 
+@schema
 class Unit(dj.Imported):
 
     definition = """   
@@ -231,6 +241,7 @@ class Unit(dj.Imported):
     """
 
     @staticmethod
+    @required
     def _get_ks_data_dir():
         return None
 
@@ -263,6 +274,7 @@ class Unit(dj.Imported):
         self.insert([{**key, **u} for u in units])
 
 
+@schema
 class UnitSpikeTimes(dj.Imported):
     """
     Extracting unit spike times per recording - relies on the clustering routine
@@ -303,6 +315,7 @@ class UnitSpikeTimes(dj.Imported):
         self.insert(unit_spikes, ignore_extra_fields=True)
 
 
+@schema
 class Waveform(dj.Imported):
     definition = """
     -> Unit
@@ -367,6 +380,7 @@ class Waveform(dj.Imported):
 
 # ===================================== Quality Control [WIP] =====================================
 
+@schema
 class ClusterQualityMetrics(dj.Imported):
     definition = """
     -> Unit

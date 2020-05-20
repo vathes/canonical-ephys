@@ -1,9 +1,15 @@
 import datajoint as dj
 import numpy as np
 
+from djutils.templates import RequiredMethod, SchemaTemplate
+
+
+schema = SchemaTemplate()
 
 # ===================================== Neuropixels Probes =====================================
 
+
+@schema
 class ProbeType(dj.Lookup):
     definition = """
     probe_type: varchar(32)  # e.g. neuropixels_1.0
@@ -106,6 +112,7 @@ class ProbeType(dj.Lookup):
                 ProbeType.Electrode.insert([{**probe_type, **e} for e in electrodes], skip_duplicates=True)
 
 
+@schema
 class Probe(dj.Lookup):
     definition = """  # represent a physical probe
     probe: varchar(32)  # unique identifier for this model of probe (e.g. part number)
@@ -115,6 +122,7 @@ class Probe(dj.Lookup):
     """
 
 
+@schema
 class ElectrodeConfig(dj.Lookup):
     definition = """
     -> ProbeType
