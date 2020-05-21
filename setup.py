@@ -6,7 +6,7 @@ import sys
 here = path.abspath(path.dirname(__file__))
 
 long_description = """"
-Canonical DataJoint pipeline for electrophysiology with Neuropixels probe
+Canonical DataJoint for electrophysiology with Neuropixels probe
 """
 
 with open(path.join(here, 'requirements.txt')) as f:
@@ -23,6 +23,6 @@ setup(
     url='https://github.com/vathes/canonical-ephys',
     keywords='neuroscience electrophysiology science datajoint',
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    scripts=['scripts/mapshell.py', 'scripts/map-mock-data.py', 'scripts/globus-shell.py'],
+    scripts=[],
     install_requires=requirements,
 )
