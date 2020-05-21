@@ -1,1 +1,1 @@
-from .ephys import schema
+from .ephys import schema as ephys
