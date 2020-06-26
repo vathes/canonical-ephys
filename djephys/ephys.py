@@ -16,11 +16,9 @@ from djutils.templates import required
 @schema
 class ProbeInsertionAcute(dj.Manual):  # choice 1 (acute)
 
-    _Subject = ...
     _Session = ...
 
     definition = """
-    -> self._Subject  # API hook point
     -> self._Session  # API hook point
     insertion_number: int
     ---
