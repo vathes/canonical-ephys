@@ -216,6 +216,11 @@ class Clustering(dj.Manual):
     clustering_note='': varchar(2000)  
     """
 
+    @staticmethod
+    @required
+    def _get_ks_data_dir():
+        return None
+
 
 # class ChampionClustering
 
@@ -236,11 +241,6 @@ class Unit(dj.Imported):
     -> ClusterQualityLabel
     """
 
-    @staticmethod
-    @required
-    def _get_ks_data_dir():
-        return None
-
     @property
     def key_source(self):
         return Clustering
@@ -250,7 +250,7 @@ class Unit(dj.Imported):
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
         npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
 
-        ks_dir = Unit._get_ks_data_dir(key)
+        ks_dir = Clustering._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Remove 0-spike units
@@ -290,7 +290,7 @@ class UnitSpikeTimes(dj.Imported):
     def make(self, key):
         units = {u['unit']: u for u in (Unit & key).fetch(as_dict=True, order_by='unit')}
 
-        ks_dir = Unit._get_ks_data_dir(key)
+        ks_dir = Clustering._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Spike-times --
@@ -339,7 +339,7 @@ class Waveform(dj.Imported):
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
         npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
 
-        ks_dir = Unit._get_ks_data_dir(key)
+        ks_dir = Clustering._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Get channel and electrode-site mapping
