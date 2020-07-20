@@ -102,3 +102,23 @@ class Kilosort:
         max_chn = self.data['channel_map'][max_chn_idx]
 
         return max_chn, max_chn_idx
+
+    def extract_spike_depths(self):
+        """ Reimplemented from https://github.com/cortex-lab/spikes/blob/master/analysis/ksDriftmap.m """
+        ycoords = self.data['channel_positions'][:, 1]
+        pc_features = self.data['pc_features'][:, 0, :]  # 1st PC only
+        pc_features = np.where(pc_features < 0, 0, pc_features)
+
+        # ---- compute center of mass of these features (spike depths) ----
+
+        # which channels for each spike?
+        spk_feature_ind = self.data['pc_feature_ind'][self.data['spike_templates'], :]
+        # ycoords of those channels?
+        spk_feature_ycoord = ycoords[spk_feature_ind]
+        # center of mass is sum(coords.*features)/sum(features)
+        self._data['spike_depths'] = np.sum(spk_feature_ycoord * pc_features**2, axis=1) / np.sum(pc_features**2, axis=1)
+
+        # ---- extract spike sites ----
+        max_site_ind = np.argmax(np.abs(self.data['templates']).max(axis=1), axis=1)
+        spike_site_ind = max_site_ind[self.data['spike_templates']]
+        self._data['spike_sites'] = self.data['channel_map'][spike_site_ind]

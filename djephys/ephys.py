@@ -204,7 +204,6 @@ class ClusterQualityLabel(dj.Lookup):
 
 @schema
 class Clustering(dj.Manual):
-
     definition = """
     -> EphysRecording
     clustering_instance: uuid
@@ -246,20 +245,14 @@ class Unit(dj.Imported):
         return Clustering
 
     def make(self, key):
-        npx_dir = EphysRecording._get_npx_data_dir(key)
-        meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
-        npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
-
         ks_dir = Clustering._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
-
         # -- Remove 0-spike units
         withspike_idx = [i for i, u in enumerate(ks.data['cluster_ids']) if (ks.data['spike_clusters'] == u).any()]
         valid_units = ks.data['cluster_ids'][withspike_idx]
         valid_unit_labels = ks.data['cluster_groups'][withspike_idx]
         # -- Get channel and electrode-site mapping
-        e_config_key = (EphysRecording * ElectrodeConfig & key).fetch1('KEY')
-        chn2electrodes = get_npx_chn2electrode_map(npx_meta, e_config_key)
+        chn2electrodes = get_npx_chn2electrode_map(key)
         # -- Insert unit, label, peak-chn
         units = []
         for unit, unit_lbl in zip(valid_units, valid_unit_labels):
@@ -281,6 +274,8 @@ class UnitSpikeTimes(dj.Imported):
     ---
     spike_count: int              # how many spikes in this recording of this unit
     unit_spike_times: longblob    # (s) spike times of this unit, relative to the start of the EphysRecording
+    unit_spike_sites : longblob   # array of electrode associated with each spike
+    unit_spike_depths : longblob  # (um) array of depths associated with each spike
     """
 
     @property
@@ -298,6 +293,12 @@ class UnitSpikeTimes(dj.Imported):
         spk_time_key = ('spike_times_sec_adj' if 'spike_times_sec_adj' in ks.data
                         else 'spike_times_sec' if 'spike_times_sec' in ks.data else 'spike_times')
         spike_times = ks.data[spk_time_key]
+        ks.extract_spike_depths()
+
+        # -- Spike-sites and Spike-depths --
+        chn2electrodes = get_npx_chn2electrode_map(key)
+        spike_sites = np.array([chn2electrodes[s]['electrode'] for s in ks.data['spike_sites']])
+        spike_depths = ks.data['spike_depths']
 
         unit_spikes = []
         for unit, unit_dict in units.items():
@@ -306,7 +307,11 @@ class UnitSpikeTimes(dj.Imported):
                                     / ks.data['params']['sample_rate'])
                 spike_count = len(unit_spike_times)
 
-                unit_spikes.append({**unit_dict, 'unit_spike_times': unit_spike_times, 'spike_count': spike_count})
+                unit_spikes.append({**unit_dict,
+                                    'unit_spike_times': unit_spike_times,
+                                    'spike_count': spike_count,
+                                    'unit_spike_sites': spike_sites[ks.data['spike_clusters'] == unit],
+                                    'unit_spike_depths': spike_depths[ks.data['spike_clusters'] == unit]})
 
         self.insert(unit_spikes, ignore_extra_fields=True)
 
@@ -402,7 +407,12 @@ class ClusterQualityMetrics(dj.Imported):
 # ========================== HELPER FUNCTIONS =======================
 
 
-def get_npx_chn2electrode_map(npx_meta, e_config_key):
+def get_npx_chn2electrode_map(ephys_recording_key):
+    npx_dir = EphysRecording._get_npx_data_dir(ephys_recording_key)
+    meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
+    npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
+    e_config_key = (EphysRecording * ElectrodeConfig & ephys_recording_key).fetch1('KEY')
+
     q_electrodes = ProbeType.Electrode * ElectrodeConfig.Electrode & e_config_key
     chn2electrode_map = {}
     for recorded_site, (shank, shank_col, shank_row, _) in enumerate(npx_meta.shankmap['data']):
