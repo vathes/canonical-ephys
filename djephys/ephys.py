@@ -275,7 +275,7 @@ class UnitSpikeTimes(dj.Imported):
     spike_count: int              # how many spikes in this recording of this unit
     unit_spike_times: longblob    # (s) spike times of this unit, relative to the start of the EphysRecording
     unit_spike_sites : longblob   # array of electrode associated with each spike
-    unit_spike_depths : longblob  # (um) array of depths associated with each spike
+    unit_spike_depths : longblob  # (um) array of depths associated with each spike, relative to the (0, 0) of the probe
     """
 
     @property
