@@ -52,8 +52,8 @@ class InsertionLocation(dj.Manual):
     _Location = ...
 
     definition = """
-    -> self._ProbeInsertion      # API hook point
-    -> self._Location            # API hook point
+    -> self._ProbeInsertion      
+    -> self._Location            
     """
 
 
@@ -70,10 +70,11 @@ class EphysRecording(dj.Imported):
     _ProbeInsertion = ProbeInsertion
 
     definition = """
-    -> self._Session             # API hook point
-    -> self._ProbeInsertion      # API hook point
+    -> self._Session             
+    -> self._ProbeInsertion      
     ---
     -> ElectrodeConfig
+    sampling_rate: float # (Hz) 
     """
 
     @staticmethod
@@ -115,7 +116,7 @@ class EphysRecording(dj.Imported):
             ElectrodeConfig.insert1({**e_config, 'electrode_config_uuid': ec_hash})
             ElectrodeConfig.Electrode.insert({**e_config, **m} for m in eg_members)
 
-        self.insert1({**key, **e_config})
+        self.insert1({**key, **e_config, 'sampling_rate': npx_meta.meta['imSampRate']})
 
 
 # ===========================================================================================
@@ -130,7 +131,7 @@ class LFP(dj.Imported):
     definition = """
     -> EphysRecording
     ---
-    lfp_sample_rate: float          # (Hz)
+    lfp_sampling_rate: float          # (Hz)
     lfp_time_stamps: longblob       # timestamps with respect to the start of the recording (recording_timestamp)
     lfp_mean: longblob              # mean of LFP across electrodes - shape (time,)
     """
@@ -150,7 +151,7 @@ class LFP(dj.Imported):
         lfp = npx_recording.lfdata[:, :-1].T  # exclude the sync channel
 
         self.insert1(dict(key,
-                          lfp_sample_rate=npx_recording.lfmeta['imSampRate'],
+                          lfp_sampling_rate=npx_recording.lfmeta['imSampRate'],
                           lfp_time_stamps=np.arange(lfp.shape[1]) / npx_recording.lfmeta['imSampRate'],
                           lfp_mean=lfp.mean(axis=0)))
         '''
