@@ -14,33 +14,17 @@ from djutils.templates import required
 
 
 @schema
-class ProbeInsertionAcute(dj.Manual):  # choice 1 (acute)
+class ProbeInsertion(dj.Manual):  # (acute)
 
     _Session = ...
 
     definition = """
-    -> self._Session  # API hook point
-    insertion_number: int
+    -> self._Session  
+    insertion_number: tinyint unsigned
     ---
     -> Probe
     """
 
-
-class ProbeInsertionChronic(dj.Manual):  # choice 2 (chronic)
-
-    _Subject = ...
-
-    definition = """
-    -> self._Subject  # API hook point
-    insertion_number: int
-    ---
-    -> Probe
-    insertion_time: datetime
-    """
-
-
-ProbeInsertion = ProbeInsertionAcute
-ProbeInsertion.__name__ = 'ProbeInsertion'
 
 # ===================================== Insertion Location =====================================
 
@@ -48,12 +32,18 @@ ProbeInsertion.__name__ = 'ProbeInsertion'
 @schema
 class InsertionLocation(dj.Manual):
 
-    _ProbeInsertion = ProbeInsertion
-    _Location = ...
+    _SkullReference = ...
 
     definition = """
-    -> self._ProbeInsertion      
-    -> self._Location            
+    -> ProbeInsertion
+    ---
+    -> self._SkullReference
+    ap_location: decimal(6, 2) # (um) anterior-posterior; ref is 0; more anterior is more positive
+    ml_location: decimal(6, 2) # (um) medial axis; ref is 0 ; more right is more positive
+    depth:       decimal(6, 2) # (um) manipulator depth relative to surface of the brain (0); more ventral is more negative
+    theta=null:  decimal(5, 2) # (deg) - elevation - rotation about the ml-axis [0, 180] - w.r.t the z+ axis
+    phi=null:    decimal(5, 2) # (deg) - azimuth - rotation about the dv-axis [0, 360] - w.r.t the x+ axis
+    beta=null:   decimal(5, 2) # (deg) rotation about the shank of the probe [-180, 180] - clockwise is increasing in degree - 0 is the probe-front facing anterior
     """
 
 
@@ -65,13 +55,8 @@ class InsertionLocation(dj.Manual):
 
 @schema
 class EphysRecording(dj.Imported):
-
-    _Session = ...
-    _ProbeInsertion = ProbeInsertion
-
     definition = """
-    -> self._Session             
-    -> self._ProbeInsertion      
+    -> ProbeInsertion      
     ---
     -> ElectrodeConfig
     sampling_rate: float # (Hz) 
@@ -97,7 +82,7 @@ class EphysRecording(dj.Imported):
                 electrode = (q_electrodes & {'shank': shank,
                                              'shank_col': shank_col,
                                              'shank_row': shank_row}).fetch1('KEY')
-                eg_members.append({**electrode, 'is_used': is_used})
+                eg_members.append({**electrode, 'used_in_reference': is_used})
         else:
             raise NotImplementedError('Processing for neuropixels probe model {} not yet implemented'.format(
                 npx_meta.probe_model))
@@ -109,11 +94,11 @@ class EphysRecording(dj.Imported):
         el_jumps = [-1] + np.where(np.diff(el_list) > 1)[0].tolist() + [len(el_list) - 1]
         ec_name = '; '.join([f'{el_list[s + 1]}-{el_list[e]}' for s, e in zip(el_jumps[:-1], el_jumps[1:])])
 
-        e_config = {**probe_type, 'electrode_config_name': ec_name}
+        e_config = {'electrode_config_hash': ec_hash}
 
         # ---- make new ElectrodeConfig if needed ----
-        if not (ElectrodeConfig & {'electrode_config_uuid': ec_hash}):
-            ElectrodeConfig.insert1({**e_config, 'electrode_config_uuid': ec_hash})
+        if not (ElectrodeConfig & e_config):
+            ElectrodeConfig.insert1({**e_config, **probe_type, 'electrode_config_name': ec_name})
             ElectrodeConfig.Electrode.insert({**e_config, **m} for m in eg_members)
 
         self.insert1({**key, **e_config, 'sampling_rate': npx_meta.meta['imSampRate']})
@@ -131,9 +116,9 @@ class LFP(dj.Imported):
     definition = """
     -> EphysRecording
     ---
-    lfp_sampling_rate: float          # (Hz)
-    lfp_time_stamps: longblob       # timestamps with respect to the start of the recording (recording_timestamp)
-    lfp_mean: longblob              # mean of LFP across electrodes - shape (time,)
+    lfp_sampling_rate: float        # (Hz)
+    lfp_time_stamps: longblob       # (s) timestamps with respect to the start of the recording (recording_timestamp)
+    lfp_mean: longblob              # (mV) mean of LFP across electrodes - shape (time,)
     """
 
     class Electrode(dj.Part):
@@ -141,7 +126,7 @@ class LFP(dj.Imported):
         -> master
         -> ElectrodeConfig.Electrode  
         ---
-        lfp: longblob               # recorded lfp at this electrode
+        lfp: longblob               # (mV) recorded lfp at this electrode 
         """
 
     def make(self, key):
@@ -179,12 +164,82 @@ class LFP(dj.Imported):
 @schema
 class ClusteringMethod(dj.Lookup):
     definition = """
-    clustering_method: varchar(32)
+    clustering_method: varchar(16)
     ---
     clustering_method_desc: varchar(1000)
     """
 
-    contents = [('kilosort', 'kilosort clustering method')]
+    contents = [('kilosort', 'kilosort clustering method'),
+                ('kilosort2', 'kilosort2 clustering method')]
+
+
+@schema
+class ClusteringParamSet(dj.Lookup):
+    definition = """
+    paramset_idx:  smallint
+    ---
+    -> ClusteringMethod    
+    paramset_desc: varchar(128)
+    param_set_hash: uuid
+    unique index (param_set_hash)
+    params: longblob  # dictionary of all applicable parameters
+    """
+
+    @classmethod
+    def insert_new_params(cls, processing_method: str, paramset_idx: int, paramset_desc: str, params: dict):
+        param_dict = {'clustering_method': processing_method,
+                      'paramset_idx': paramset_idx,
+                      'paramset_desc': paramset_desc,
+                      'params': params,
+                      'param_set_hash': uuid.UUID(utils.dict_to_hash(params))}
+        q_param = cls & {'param_set_hash': param_dict['param_set_hash']}
+
+        if q_param:  # If the specified param-set already exists
+            pname = q_param.fetch1('param_set_name')
+            if pname == paramset_idx:  # If the existed set has the same name: job done
+                return
+            else:  # If not same name: human error, trying to add the same paramset with different name
+                raise dj.DataJointError('The specified param-set already exists - name: {}'.format(pname))
+        else:
+            cls.insert1(param_dict)
+
+
+@schema
+class ClusteringTask(dj.Imported):
+    definition = """
+    -> EphysRecording
+    ---
+    -> ClusteringParamSet
+    """
+
+    @staticmethod
+    @required
+    def _get_paramset_idx(ephys_rec_key: dict) -> int:
+        """
+        Retrieve the 'paramset_idx' (for ClusteringParamSet) to be used for this EphysRecording
+        :param ephys_rec_key: a dictionary of one EphysRecording
+        :return: int specifying the 'paramset_idx'
+        """
+        return None
+
+    @staticmethod
+    @required
+    def _get_ks_data_dir(clustering_task_key: dict) -> str:
+        """
+        Retrieve the Kilosort output directory for a given ClusteringTask
+        :param clustering_task_key: a dictionary of one EphysRecording
+        :return: a string for full path to the resulting Kilosort output directory
+        """
+        return None
+
+    def make(self, key):
+        key['paramset_idx'] = ClusteringTask._get_paramset_idx(key)
+        self.insert1(key)
+
+        data_dir = pathlib.Path(ClusteringTask._get_ks_data_dir(key))
+        if not data_dir.exists():
+            # this is where we can trigger the clustering job
+            print(f'Clustering results not yet found for {key} - Triggering kilosort not yet implemented!')
 
 
 @schema
@@ -204,90 +259,42 @@ class ClusterQualityLabel(dj.Lookup):
 
 
 @schema
-class Clustering(dj.Manual):
+class Clustering(dj.Imported):
     definition = """
-    -> EphysRecording
-    clustering_instance: uuid
+    -> ClusteringTask
     ---
-    -> ClusteringMethod
     clustering_time: datetime  # time of generation of this set of clustering results 
-    quality_control: bool  # has this clustering result undergone quality control?
-    manual_curation: bool  # has manual curation been performed on this clustering result?
+    quality_control: bool      # has this clustering result undergone quality control?
+    manual_curation: bool      # has manual curation been performed on this clustering result?
     clustering_note='': varchar(2000)  
     """
 
-    @staticmethod
-    @required
-    def _get_ks_data_dir():
-        return None
-
-
-# class ChampionClustering
-
-# ================================== Clustering Results ===================================
-# The abstract function _get_ks_data_dir() should expect one argument in the form of a
-# dictionary with the keys from user-defined Subject and Session, as well as
-# all attributes in the "Clustering" table definition in this djephys
-
-
-@schema
-class Unit(dj.Imported):
-
-    definition = """   
-    -> Clustering
-    unit: int
-    ---
-    -> ElectrodeConfig.Electrode  # electrode on the probe that this unit has highest response amplitude
-    -> ClusterQualityLabel
-    """
-
-    @property
-    def key_source(self):
-        return Clustering
+    class Unit(dj.Part):
+        definition = """   
+        -> master
+        unit: int
+        ---
+        -> ElectrodeConfig.Electrode  # electrode on the probe that this unit has highest response amplitude
+        -> ClusterQualityLabel
+        spike_count: int         # how many spikes in this recording of this unit
+        spike_times: longblob    # (s) spike times of this unit, relative to the start of the EphysRecording
+        spike_sites : longblob   # array of electrode associated with each spike
+        spike_depths : longblob  # (um) array of depths associated with each spike, relative to the (0, 0) of the probe    
+        """
 
     def make(self, key):
-        ks_dir = Clustering._get_ks_data_dir(key)
+        ks_dir = ClusteringTask._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
+        # ---------- Clustering ----------
+        creation_time, is_curated, is_qc = kilosort.extract_clustering_info(ks_dir)
+
+        # ---------- Unit ----------
         # -- Remove 0-spike units
         withspike_idx = [i for i, u in enumerate(ks.data['cluster_ids']) if (ks.data['spike_clusters'] == u).any()]
         valid_units = ks.data['cluster_ids'][withspike_idx]
         valid_unit_labels = ks.data['cluster_groups'][withspike_idx]
         # -- Get channel and electrode-site mapping
         chn2electrodes = get_npx_chn2electrode_map(key)
-        # -- Insert unit, label, peak-chn
-        units = []
-        for unit, unit_lbl in zip(valid_units, valid_unit_labels):
-            if (ks.data['spike_clusters'] == unit).any():
-                unit_channel, _ = ks.get_best_channel(unit)
-                units.append({'unit': unit, 'cluster_quality_label': unit_lbl, **chn2electrodes[unit_channel]})
-
-        self.insert([{**key, **u} for u in units])
-
-
-@schema
-class UnitSpikeTimes(dj.Imported):
-    """
-    Extracting unit spike times per recording - relies on the clustering routine
-        outputting spikes with times relative to the start of the earliest Session in this SessionGroup
-    """
-    definition = """
-    -> Unit
-    ---
-    spike_count: int              # how many spikes in this recording of this unit
-    unit_spike_times: longblob    # (s) spike times of this unit, relative to the start of the EphysRecording
-    unit_spike_sites : longblob   # array of electrode associated with each spike
-    unit_spike_depths : longblob  # (um) array of depths associated with each spike, relative to the (0, 0) of the probe
-    """
-
-    @property
-    def key_source(self):
-        return Clustering & Unit
-
-    def make(self, key):
-        units = {u['unit']: u for u in (Unit & key).fetch(as_dict=True, order_by='unit')}
-
-        ks_dir = Clustering._get_ks_data_dir(key)
-        ks = kilosort.Kilosort(ks_dir)
 
         # -- Spike-times --
         # spike_times_sec_adj > spike_times_sec > spike_times
@@ -297,37 +304,37 @@ class UnitSpikeTimes(dj.Imported):
         ks.extract_spike_depths()
 
         # -- Spike-sites and Spike-depths --
-        chn2electrodes = get_npx_chn2electrode_map(key)
         spike_sites = np.array([chn2electrodes[s]['electrode'] for s in ks.data['spike_sites']])
         spike_depths = ks.data['spike_depths']
 
-        unit_spikes = []
-        for unit, unit_dict in units.items():
+        # -- Insert unit, label, peak-chn
+        units = []
+        for unit, unit_lbl in zip(valid_units, valid_unit_labels):
             if (ks.data['spike_clusters'] == unit).any():
-                unit_spike_times = (spike_times[ks.data['spike_clusters'] == unit]
-                                    / ks.data['params']['sample_rate'])
+                unit_channel, _ = ks.get_best_channel(unit)
+                unit_spike_times = (spike_times[ks.data['spike_clusters'] == unit] / ks.data['params']['sample_rate'])
                 spike_count = len(unit_spike_times)
 
-                unit_spikes.append({**unit_dict,
-                                    'unit_spike_times': unit_spike_times,
-                                    'spike_count': spike_count,
-                                    'unit_spike_sites': spike_sites[ks.data['spike_clusters'] == unit],
-                                    'unit_spike_depths': spike_depths[ks.data['spike_clusters'] == unit]})
+                units.append({'unit': unit,
+                              'cluster_quality_label': unit_lbl,
+                              **chn2electrodes[unit_channel],
+                              'spike_times': unit_spike_times,
+                              'spike_count': spike_count,
+                              'spike_sites': spike_sites[ks.data['spike_clusters'] == unit],
+                              'spike_depths': spike_depths[ks.data['spike_clusters'] == unit]})
 
-        self.insert(unit_spikes, ignore_extra_fields=True)
+        self.insert1({**key, 'clustering_time': creation_time,
+                      'quality_control': is_qc, 'manual_curation': is_curated})
+        self.Unit.insert([{**key, **u} for u in units])
 
 
 @schema
 class Waveform(dj.Imported):
     definition = """
-    -> Unit
+    -> Clustering.Unit
     ---
     peak_chn_waveform_mean: longblob  # mean over all spikes at the peak channel for this unit
     """
-
-    @property
-    def key_source(self):
-        return Clustering & Unit
 
     class Electrode(dj.Part):
         definition = """
@@ -338,8 +345,12 @@ class Waveform(dj.Imported):
         waveforms=null: longblob  # (spike x sample) waveform of each spike at each electrode
         """
 
+    @property
+    def key_source(self):
+        return Clustering
+
     def make(self, key):
-        units = {u['unit']: u for u in (Unit & key).fetch(as_dict=True, order_by='unit')}
+        units = {u['unit']: u for u in (Clustering.Unit & key).fetch(as_dict=True, order_by='unit')}
 
         npx_dir = EphysRecording._get_npx_data_dir(key)
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
@@ -366,7 +377,7 @@ class Waveform(dj.Imported):
         else:
             npx_recording = neuropixels.Neuropixels(npx_dir)
             for unit_no, unit_dict in units.items():
-                spks = (UnitSpikeTimes & unit_dict).fetch1('unit_spike_times')
+                spks = (Clustering.Unit & unit_dict).fetch1('unit_spike_times')
                 wfs = npx_recording.extract_spike_waveforms(spks, ks.data['channel_map'])  # (sample x channel x spike)
                 wfs = wfs.transpose((1, 2, 0))  # (channel x spike x sample)
                 for chn, chn_wf in zip(ks.data['channel_map'], wfs):
@@ -385,7 +396,7 @@ class Waveform(dj.Imported):
 @schema
 class ClusterQualityMetrics(dj.Imported):
     definition = """
-    -> Unit
+    -> Clustering.Unit
     ---
     amp: float
     snr: float
@@ -404,6 +415,12 @@ class ClusterQualityMetrics(dj.Imported):
     cumulative_drift=null: float  # Cumulative change in spike depth throughout recording 
     """
 
+    @property
+    def key_source(self):
+        return Clustering
+
+    def make(self, key):
+        pass
 
 # ========================== HELPER FUNCTIONS =======================
 
