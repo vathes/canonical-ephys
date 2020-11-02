@@ -356,12 +356,12 @@ class Waveform(dj.Imported):
         meta_filepath = next(pathlib.Path(npx_dir).glob('*.ap.meta'))
         npx_meta = neuropixels.NeuropixelsMeta(meta_filepath)
 
-        ks_dir = Clustering._get_ks_data_dir(key)
+        ks_dir = ClusteringTask._get_ks_data_dir(key)
         ks = kilosort.Kilosort(ks_dir)
 
         # -- Get channel and electrode-site mapping
-        e_config_key = (EphysRecording * ElectrodeConfig & key).fetch1('KEY')
-        chn2electrodes = get_npx_chn2electrode_map(npx_meta, e_config_key)
+        rec_key = (EphysRecording & key).fetch1('KEY')
+        chn2electrodes = get_npx_chn2electrode_map(rec_key)
 
         is_qc = (Clustering & key).fetch1('quality_control')
 
