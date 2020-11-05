@@ -125,18 +125,16 @@ class Probe(dj.Lookup):
 @schema
 class ElectrodeConfig(dj.Lookup):
     definition = """
+    electrode_config_hash: uuid  
+    ---
     -> ProbeType
     electrode_config_name: varchar(64)  # user friendly name
-    ---
-    electrode_config_uuid: uuid     # hash of the group and group_member (ensure uniqueness)
-    unique index (electrode_config_uuid)
     """
 
     class Electrode(dj.Part):
-        definition = """
+        definition = """  # Electrodes selected for recording
         -> master
         -> ProbeType.Electrode
         ---
-        is_used: bool  # is this channel used for spatial average (ref channels are by default not used)
+        used_in_reference: bool  # is this channel used to form the internal reference
         """
-

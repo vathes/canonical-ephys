@@ -2,6 +2,7 @@ from os import path
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import re
 import logging
 
 from .utils import handle_string
@@ -102,3 +103,64 @@ class Kilosort:
         max_chn = self.data['channel_map'][max_chn_idx]
 
         return max_chn, max_chn_idx
+
+    def extract_spike_depths(self):
+        """ Reimplemented from https://github.com/cortex-lab/spikes/blob/master/analysis/ksDriftmap.m """
+        ycoords = self.data['channel_positions'][:, 1]
+        pc_features = self.data['pc_features'][:, 0, :]  # 1st PC only
+        pc_features = np.where(pc_features < 0, 0, pc_features)
+
+        # ---- compute center of mass of these features (spike depths) ----
+
+        # which channels for each spike?
+        spk_feature_ind = self.data['pc_feature_ind'][self.data['spike_templates'], :]
+        # ycoords of those channels?
+        spk_feature_ycoord = ycoords[spk_feature_ind]
+        # center of mass is sum(coords.*features)/sum(features)
+        self._data['spike_depths'] = np.sum(spk_feature_ycoord * pc_features**2, axis=1) / np.sum(pc_features**2, axis=1)
+
+        # ---- extract spike sites ----
+        max_site_ind = np.argmax(np.abs(self.data['templates']).max(axis=1), axis=1)
+        spike_site_ind = max_site_ind[self.data['spike_templates']]
+        self._data['spike_sites'] = self.data['channel_map'][spike_site_ind]
+
+
+def extract_clustering_info(cluster_output_dir):
+    creation_time = None
+
+    phy_curation_indicators = ['Merge clusters', 'Split cluster', 'Change metadata_group']
+    # ---- Manual curation? ----
+    phylog_fp = cluster_output_dir / 'phy.log'
+    if phylog_fp.exists():
+        phylog = pd.read_fwf(phylog_fp, colspecs=[(6, 40), (41, 250)])
+        phylog.columns = ['meta', 'detail']
+        curation_row = [bool(re.match('|'.join(phy_curation_indicators), str(s))) for s in phylog.detail]
+        is_curated = bool(np.any(curation_row))
+        if creation_time is None and is_curated:
+            row_meta = phylog.meta[np.where(curation_row)[0].max()]
+            datetime_str = re.search('\d{2}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', row_meta)
+            if datetime_str:
+                creation_time = datetime.strptime(datetime_str.group(), '%Y-%m-%d %H:%M:%S')
+            else:
+                creation_time = datetime.fromtimestamp(phylog_fp.stat().st_ctime)
+                time_str = re.search('\d{2}:\d{2}:\d{2}', row_meta)
+                if time_str:
+                    creation_time = datetime.combine(creation_time.date(),
+                                                     datetime.strptime(time_str.group(), '%H:%M:%S').time())
+    else:
+        is_curated = False
+
+    # ---- Quality control? ----
+    metric_fp = cluster_output_dir / 'metrics.csv'
+    if metric_fp.exists():
+        is_qc = True
+        if creation_time is None:
+            creation_time = datetime.fromtimestamp(metric_fp.stat().st_ctime)
+    else:
+        is_qc = False
+
+    if creation_time is None:
+        spk_fp = next(cluster_output_dir.glob('spike_times.npy'))
+        creation_time = datetime.fromtimestamp(spk_fp.stat().st_ctime)
+
+    return creation_time, is_curated, is_qc
